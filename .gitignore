@@ -1,0 +1,14 @@
+.DS_Store
+__pycache__/
+*.pyc
+.venv*/
+*.nosync/
+data/
+*.IMG
+*.LBL
+*.tif
+*.bsp
+*.bpc
+*.tf
+*.tpc
+*.log
