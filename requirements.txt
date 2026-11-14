@@ -1,0 +1,6 @@
+numpy
+mlx
+skyfield
+pillow
+pyshp
+pyproj
