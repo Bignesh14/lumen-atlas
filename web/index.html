@@ -1,0 +1,142 @@
+<!doctype html>
+<!-- Lumen Atlas - NASA Space Apps Challenge 2026 (Lunar Landing Site Navigator).
+     AI-assisted code: written with Claude (Anthropic), reviewed and run by Bignesh Das. Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumen Atlas</title>
+<meta name="description" content="Where and when the Sun and Earth stay above the real terrain at the Moon's south pole. Compare landing sites and dates, see time to sunset and Earthset, and find a Plan B when the schedule slips.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bar">
+  <div class="brand">
+    <h1>Lumen Atlas</h1>
+    <p>Sun and Earth over the real terrain of the lunar south pole</p>
+  </div>
+  <div class="site-pick">
+    <label for="sitesel">Site</label>
+    <select id="sitesel"></select>
+  </div>
+  <div class="when">
+    <label for="when">Time (UTC)</label>
+    <div class="when-row">
+      <button class="step" data-step="-24" aria-label="One day earlier">−1 d</button>
+      <button class="step" data-step="-1" aria-label="One hour earlier">−1 h</button>
+      <input id="when" type="datetime-local" step="3600">
+      <button class="step" data-step="1" aria-label="One hour later">+1 h</button>
+      <button class="step" data-step="24" aria-label="One day later">+1 d</button>
+      <button id="play" aria-pressed="false">Play</button>
+    </div>
+  </div>
+  <div class="mode" role="group" aria-label="Who is using this">
+    <button id="mode-explore" class="on" aria-pressed="true">Explore</button>
+    <button id="mode-plan" aria-pressed="false">Plan a mission</button>
+  </div>
+</header>
+
+<section class="sky" aria-label="Horizon panorama">
+  <canvas id="pano" height="300"></canvas>
+  <div class="pano-key">
+    <span class="k sun">Sun, next 14 days</span>
+    <span class="k earth">Earth, next 14 days</span>
+    <span class="k flat">Horizon of a perfectly smooth Moon</span>
+    <span id="exag" class="note"></span>
+  </div>
+</section>
+
+<main class="grid">
+  <section class="map" aria-label="Map">
+    <div class="map-head">
+      <button id="back" hidden>All regions</button>
+      <h2 id="maptitle">South pole, Artemis III candidate regions</h2>
+    </div>
+    <div class="layers" id="layers" hidden role="tablist" aria-label="Map layer">
+      <button role="tab" data-layer="both" class="on">Sun and Earth together</button>
+      <button role="tab" data-layer="sun">Sunlight</button>
+      <button role="tab" data-layer="earth">Earth in view</button>
+      <button role="tab" data-layer="night">Longest night</button>
+    </div>
+    <div class="canvas-wrap"><canvas id="map"></canvas><div id="tip" class="tip" hidden></div></div>
+    <div class="legend" id="legend" hidden><span id="lg-lo"></span><i id="lg-bar"></i><span id="lg-hi"></span></div>
+    <p class="map-note" id="mapnote">Click a region to see every 20 m pixel. Colours show 2027–2028.</p>
+  </section>
+
+  <section class="now" aria-live="polite">
+    <h2 id="sitename">—</h2>
+    <p class="coords" id="coords"></p>
+    <div class="readout sunbox">
+      <h3>Sun</h3>
+      <p class="big" id="sun-state">—</p>
+      <p id="sun-detail"></p>
+      <p class="next" id="sun-next"></p>
+    </div>
+    <div class="readout earthbox">
+      <h3>Earth</h3>
+      <p class="big" id="earth-state">—</p>
+      <p id="earth-detail"></p>
+      <p class="next" id="earth-next"></p>
+    </div>
+    <button id="pin" class="primary">Add to comparison</button>
+
+    <div class="explain" id="explain"></div>
+
+    <div class="plan" id="plan" hidden>
+      <h3>Mission check</h3>
+      <div class="form">
+        <label>Surface stay <input id="p-days" type="number" min="0.5" max="30" step="0.5" value="6.5"> days</label>
+        <label>Sunlight at least <input id="p-sun" type="number" min="0" max="100" step="5" value="100"> % of the stay</label>
+        <label>Earth in view at least <input id="p-earth" type="number" min="0" max="100" step="5" value="50"> % of the stay</label>
+        <label class="check"><input id="p-landearth" type="checkbox" checked> Earth in view at touchdown</label>
+        <label>Landing slips by <input id="p-slip" type="number" min="0" max="60" step="1" value="0"> days</label>
+      </div>
+      <p class="verdict" id="verdict"></p>
+      <div class="planb">
+        <h4>Same site, other dates</h4>
+        <ol id="pb-dates"></ol>
+        <h4>Same date, other spots in this region</h4>
+        <p class="hint" id="pb-hint"></p>
+        <ol id="pb-spots"></ol>
+      </div>
+    </div>
+  </section>
+</main>
+
+<section class="timeline" aria-label="Next 30 days">
+  <h2>Next 30 days at this site</h2>
+  <canvas id="tl" height="120"></canvas>
+  <p class="hint">Click the strip to jump to that time.</p>
+</section>
+
+<section class="compare" id="compare" hidden>
+  <h2>Comparison</h2>
+  <div class="table-wrap"><table id="cmp"></table></div>
+</section>
+
+<footer>
+  <div>
+    <h2>Checked against NASA</h2>
+    <ul id="checks">
+      <li>Sun and Earth positions match JPL Horizons to better than 0.0001° (Malapert, December 2026).</li>
+      <li>GPU horizons match an independent float64 calculation to within 0.0024°.</li>
+      <li>Ground heights at Apollo, Chang'e-4 and Chang'e-6 landers match LROC's published values within 7 m.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Data</h2>
+    <p>NASA LRO LOLA elevation (LDEM_80S_20M, LDEM_64); NAIF SPICE DE421 and lunar orientation kernels; JPL Horizons;
+       USGS Artemis III candidate regions (McClernan 2024, doi:10.5066/P1MEQ6UK). Site coordinates from LROC, NASA NSSDC and ISRO.</p>
+  </div>
+  <div>
+    <h2>How it was made</h2>
+    <p>Horizons for every 20 m pixel were traced with custom Metal GPU kernels on an Apple M5 Max (360 directions, 200 km, lunar curvature).
+       Code written with AI assistance (Claude, Anthropic) and reviewed by the author. Not an official NASA product.</p>
+  </div>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>
