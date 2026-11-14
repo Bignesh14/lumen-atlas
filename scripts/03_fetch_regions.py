@@ -5,7 +5,7 @@ Source: USGS Astrogeology, "Down Selected Artemis III Candidate Landing Site Nav
 Grids" (McClernan 2024), doi:10.5066/P1MEQ6UK, CC0.  We use the 1 km grid shapefiles:
 the union of a region's 1 km cells is the region.  Coordinates are converted from the
 USGS Lunar Polar Stereographic (LPS) projection to lat/lon with the .prj that ships with them.
-Writes data.nosync/regions/regions.json
+Writes data.nosync/regions/regions.json (outlines from the release's lon/lat file)
 Run:  python scripts/03_fetch_regions.py
 """
 import io
@@ -52,66 +52,68 @@ def all_files(item):
     return files
 
 
-def main():
-    DEST.mkdir(parents=True, exist_ok=True)
-    item = json.loads(get(API))
-    files = all_files(item)
-    print(f"ScienceBase item has {len(files)} files")
-    wanted = []
-    for f in files:
-        name = f.get("name", ""); url = f.get("downloadUri") or f.get("url")
-        if not url or not re.search(r"1\s*km", name, re.I):
-            continue
-        key = region_of(name)
-        if key:
-            wanted.append((key, name, url))
-    if not wanted:
-        print("No 1 km files matched. File names on the item are:")
-        for f in files:
-            print("   ", f.get("name"))
-        sys.exit(1)
-    for key, name, url in wanted:
-        d = DEST / key; d.mkdir(exist_ok=True)
-        blob = get(url)
-        if name.lower().endswith(".zip") or blob[:2] == b"PK":
-            zipfile.ZipFile(io.BytesIO(blob)).extractall(d)
-        else:
-            (d / name).write_bytes(blob)
-        print(f"  {key:22s} <- {name} ({len(blob)/1e3:.0f} kB)")
+LONLAT_URL = "https://sciencebase.usgs.gov/manager/download/cm4aea2di00gx0uo7c1j7dlg3"
+LONLAT_ZIP = "A3_9regions-lonlat-simplified.zip"
 
+
+def norm(s):
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def main():
+    """Uses the region outlines the USGS release ships in lon/lat ("A3_9regions-lonlat-simplified.zip").
+    ScienceBase sits behind a bot check, so the zip is downloaded with curl (or a browser) first:
+      curl -L -A "Mozilla/5.0" -o data.nosync/regions/A3_9regions-lonlat-simplified.zip <LONLAT_URL>
+    """
     import shapefile
     from pyproj import CRS, Transformer
+    DEST.mkdir(parents=True, exist_ok=True)
+    z = DEST / LONLAT_ZIP
+    if not z.exists() or z.stat().st_size < 1000:
+        sys.exit(f"missing {z}\ndownload it first:\n  curl -L -A 'Mozilla/5.0' -o '{z}' '{LONLAT_URL}'")
+    zipfile.ZipFile(z).extractall(DEST / "lonlat")
+    shps = sorted((DEST / "lonlat").rglob("*.shp"))
+    print("shapefiles:", [p.name for p in shps])
+    found = {}
+    keys = {norm(k): k for k in REGIONS}
+    for shp in shps:
+        prj = shp.with_suffix(".prj")
+        tr = None
+        if prj.exists():
+            crs = CRS.from_wkt(prj.read_text())
+            if not crs.is_geographic:
+                tr = Transformer.from_crs(crs, crs.geodetic_crs, always_xy=True)
+            print(f"  {shp.name}: {crs.name} (geographic={crs.is_geographic})")
+        rd = shapefile.Reader(str(shp))
+        fields = [f[0] for f in rd.fields[1:]]
+        for sr in rd.iterShapeRecords():
+            rec = dict(zip(fields, list(sr.record)))
+            text = " ".join(str(v) for v in rec.values()) + " " + shp.stem
+            hit = None
+            for nk in sorted(keys, key=len, reverse=True):     # longest first (Mons Mouton Plateau)
+                if nk in norm(text):
+                    hit = keys[nk]; break
+            if hit is None:
+                print("    unmatched record:", rec); continue
+            pts = np.asarray(sr.shape.points, dtype=np.float64)
+            parts = list(sr.shape.parts) + [len(pts)]
+            for a, b in zip(parts[:-1], parts[1:]):
+                ring = pts[a:b]
+                lon, lat = (tr.transform(ring[:, 0], ring[:, 1]) if tr else (ring[:, 0], ring[:, 1]))
+                found.setdefault(hit, []).append(np.round(np.stack([lat, lon], 1), 6).tolist())
     out = []
     for key, display in REGIONS.items():
-        shps = sorted((DEST / key).rglob("*.shp"))
-        cells = []
-        for shp in shps:
-            prj = shp.with_suffix(".prj")
-            crs = CRS.from_wkt(prj.read_text())
-            tr = Transformer.from_crs(crs, crs.geodetic_crs, always_xy=True)
-            rd = shapefile.Reader(str(shp))
-            shapes = rd.shapes()
-            if rd.shapeType in (5, 15, 25):            # polygons: each one is a 1 km cell
-                rings = [np.asarray(s.points, dtype=np.float64) for s in shapes]
-            else:                                      # grid lines: the region is their bounding box
-                pts = np.concatenate([np.asarray(s.points, dtype=np.float64) for s in shapes])
-                x0, y0 = pts.min(0); x1, y1 = pts.max(0)
-                rings = [np.array([[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]])]
-            print(f"    {shp.name}: shapeType {rd.shapeType}, {len(shapes)} shapes")
-            for ring in rings:
-                lon, lat = tr.transform(ring[:, 0], ring[:, 1])
-                cells.append(np.round(np.stack([lat, lon], 1), 6).tolist())
+        cells = found.get(key)
         if not cells:
-            print(f"  WARNING: no shapes for {key}")
-            continue
+            print(f"  WARNING: no outline for {key}"); continue
         allpts = np.concatenate([np.asarray(c) for c in cells])
         u = np.stack([np.cos(np.radians(allpts[:, 0])) * np.cos(np.radians(allpts[:, 1])),
                       np.cos(np.radians(allpts[:, 0])) * np.sin(np.radians(allpts[:, 1])),
                       np.sin(np.radians(allpts[:, 0]))], 1).mean(0)
         clat = float(np.degrees(np.arcsin(u[2] / np.linalg.norm(u)))); clon = float(np.degrees(np.arctan2(u[1], u[0])))
         out.append({"key": key, "name": display, "center": [round(clat, 5), round(clon, 5)],
-                    "n_cells": len(cells), "cells": cells, "crs": crs.name})
-        print(f"  {display:20s} {len(cells):5d} cells, centre {clat:8.4f}, {clon:9.4f}   crs: {crs.name}")
+                    "n_cells": len(cells), "cells": cells})
+        print(f"  {display:20s} {len(cells):3d} ring(s), {len(allpts):5d} pts, centre {clat:8.4f}, {clon:9.4f}")
     json.dump(out, open(DEST / "regions.json", "w"))
     print(f"wrote {DEST / 'regions.json'} ({len(out)} regions)")
 

@@ -1,0 +1,16 @@
+{
+ "start_utc": "2026-11-01T00:00:00Z",
+ "step_hours": 1,
+ "hours": 36528,
+ "fields": 7,
+ "frame": "MOON_ME_DE421 (apparent, from Moon centre)",
+ "layout": [
+  "sun_ux",
+  "sun_uy",
+  "sun_uz",
+  "sun_radius_deg",
+  "earth_x_km",
+  "earth_y_km",
+  "earth_z_km"
+ ]
+}

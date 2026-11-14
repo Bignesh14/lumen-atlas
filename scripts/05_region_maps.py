@@ -41,8 +41,21 @@ def load_dem():
     return PolarDEM(DEM_DIR / "LDEM_80S_20M.IMG", orientation=(ori["sx"], ori["sy"], ori["swap"]))
 
 
+def densify(ring, n=40):
+    """The USGS outlines are geographic polygons: their edges run straight in lat/lon, which is
+    curved on the polar map.  Insert points along each edge before projecting."""
+    ring = np.asarray(ring, dtype=np.float64)
+    out = []
+    for a, b in zip(ring[:-1], ring[1:]):
+        d = b - a; d[1] = (d[1] + 180.0) % 360.0 - 180.0
+        t = np.linspace(0.0, 1.0, n, endpoint=False)[:, None]
+        out.append(a + t * d)
+    out.append(ring[-1:])
+    return np.concatenate(out)
+
+
 def region_box(dem, cells, margin_px=25):
-    pts = np.concatenate([np.asarray(c) for c in cells])
+    pts = np.concatenate([densify(c) for c in cells])
     r, c = dem.ll_to_rc(pts[:, 0], pts[:, 1])
     r0 = int(np.floor(r.min())) - margin_px; r1 = int(np.ceil(r.max())) + margin_px
     c0 = int(np.floor(c.min())) - margin_px; c1 = int(np.ceil(c.max())) + margin_px
@@ -52,7 +65,7 @@ def region_box(dem, cells, margin_px=25):
 def region_mask(dem, cells, r0, c0, H, W, stride):
     img = Image.new("L", (W, H), 0); dr = ImageDraw.Draw(img)
     for cell in cells:
-        cell = np.asarray(cell)
+        cell = densify(cell)
         r, c = dem.ll_to_rc(cell[:, 0], cell[:, 1])
         dr.polygon(list(zip((c - c0) / stride, (r - r0) / stride)), fill=255)
     return np.asarray(img) > 0
