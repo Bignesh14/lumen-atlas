@@ -128,6 +128,23 @@ def dem_on_gpu(dem):
     return _dem_cache[key]
 
 
+def horizon_mx(dem, obs_tab, n_az=360, max_km=200.0):
+    """Like horizon_gpu but keeps the result on the GPU: MLX float32 array (n_az * N),
+    azimuth-major (index = az * N + observer).  Used to feed the visibility kernel directly."""
+    import mlx.core as mx
+    kernel = _get_kernel()
+    _, st = make_steps(dem.R, max_km=max_km)
+    _, az = azimuths(n_az)
+    N = obs_tab.shape[0]
+    (res,) = kernel(inputs=[dem_on_gpu(dem), mx.array(obs_tab.astype(np.float32)),
+                            mx.array(az.astype(np.float32)), mx.array(st.astype(np.float32)),
+                            mx.array(dem.kernel_params()),
+                            mx.array(np.array([N, n_az, st.shape[0], dem.H, dem.W, 0], dtype=np.int32))],
+                    grid=(N * n_az, 1, 1), threadgroup=(256, 1, 1),
+                    output_shapes=[(N * n_az,)], output_dtypes=[mx.float32])
+    return res
+
+
 def horizon_gpu(dem, obs_tab, n_az=360, max_km=200.0, layout="az_major", chunk=262144):
     """Horizon elevation (deg) for each observer row of obs_tab -> array (N, n_az) float32."""
     import mlx.core as mx
