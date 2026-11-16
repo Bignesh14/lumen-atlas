@@ -2,10 +2,11 @@
 
 **Where and when can you land at the Moon's south pole and keep both the Sun and Earth above the real skyline?**
 
-Lumen Atlas was built during the NASA Space Apps Challenge 2026 weekend for the challenge *Lunar Landing Site Navigator*
+Lumen Atlas is a project for NASA Space Apps Challenge 2026, challenge *Lunar Landing Site Navigator*
 (Boston local event, solo team: Bignesh Das).
 
 - **Live app:** https://bignesh14.github.io/lumen-atlas/
+- **Demo video (87 s, with narration):** [docs/LumenAtlas-demo.mp4](docs/LumenAtlas-demo.mp4)
 
 ## What it does
 - **Pick a spot and an hour** (2026–2030): any pixel of NASA's nine Artemis III candidate regions, or a famous
