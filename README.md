@@ -6,7 +6,7 @@ Lumen Atlas is a project for NASA Space Apps Challenge 2026, challenge *Lunar La
 (Boston local event, solo team: Bignesh Das).
 
 - **Live app:** https://bignesh14.github.io/lumen-atlas/
-- **Demo video (2 min 51 s, narrated):** [docs/LumenAtlas-demo.mp4](https://bignesh14.github.io/lumen-atlas/docs/LumenAtlas-demo.mp4)
+- **Demo video (2 min 51 s, narrated):** [docs/LumenAtlas-demo.mp4](https://youtu.be/UzDrP0IF2t0)
 
 ## What it does
 - **Pick a spot and an hour** (2026–2030): any pixel of NASA's nine Artemis III candidate regions, or a famous
